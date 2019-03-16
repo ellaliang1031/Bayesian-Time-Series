@@ -1,0 +1,235 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+```{r}
+#import the data
+agincome<-read.csv('D:/llq/2018/Bayes/project/Agriculturedata.csv',header = TRUE)
+head(agincome)
+summary(agincome)
+```
+```{r}
+income<-ts(agincome$Agriculture.National..Income,start = 1952)
+plot(income,type='o',main="Agricultural Income from 1952 to 1988")
+```
+```{r}
+###auto-correlations
+acf(income)
+pacf(income)
+```
+```{r}
+library(tseries)
+adf.test(income)
+```
+
+```{r}
+income.diff<-diff(income)
+adf.test(income.diff)
+acf(income.diff)
+pacf(income.diff)
+```
+```{r}
+
+```
+
+
+```{r}
+incomeres<-income[4:37]
+incomelag2<-income[2:35]
+incomelag1<-income[1:34]
+incomelag3<-income[3:36]
+```
+
+```{r}
+###one lag
+library(R2WinBUGS)
+ts.model1 <- function(){
+    for (t in 1:T) {
+      y[t]~dnorm(mu[t],tau)
+      mu[t] <- alpha+beta*x[t]
+    }
+  
+  alpha ~ dnorm(0,1.0E-5)
+  beta ~ dnorm(0,1.0E-5)
+  tau~dgamma(0.01,0.01)
+}
+
+# the file I will save it too
+ts.file1 <- "D://tsmodel1.txt"
+
+## write model file:
+write.model(ts.model1,ts.file1)
+## and let's take a look:
+file.show(ts.file1)
+
+system.time(
+ts.bugs1 <- bugs(data=list(T=34,
+        x=incomelag3, y=incomeres),
+      inits=list(list(tau=1)),
+      parameters.to.save=c("alpha","beta","tau"),
+      ### PATH TO THE MODEL FILE
+      model.file=ts.file1,
+      n.chains=1,
+      n.iter=10000,
+      n.sim=5000,
+      n.burnin=5000,
+      n.thin=1,
+      DIC=T,
+      bugs.directory=paste0(Sys.getenv(c("USERPROFILE")), "\\WinBUGS14"),debug=T)
+)
+```
+```{r}
+ts.model2 <- function(){
+    for (t in 1:T) {
+      y[t]~dnorm(mu[t],tau)
+      mu[t] <- alpha+beta1*x1[t]+beta2*x2[t]
+    }
+  
+  alpha ~ dnorm(0,1.0E-5)
+  beta1 ~ dnorm(0,1.0E-5)
+  beta2 ~ dnorm(0,1.0E-5)
+  tau~dgamma(0.01,0.01)
+}
+
+# the file I will save it too
+ts.file2 <- "D://tsmodel2.txt"
+
+## write model file:
+write.model(ts.model2,ts.file2)
+## and let's take a look:
+file.show(ts.file2)
+
+system.time(
+ts.bugs2 <- bugs(data=list(T=34,
+        x1=incomelag3,x2=incomelag2,y=incomeres),
+      inits=list(list(tau=1)),
+      parameters.to.save=c("alpha","beta1","beta2","tau"),
+      ### PATH TO THE MODEL FILE
+      model.file=ts.file2,
+      n.chains=1,
+      n.iter=10000,
+      n.sim=5000,
+      n.burnin=5000,
+      n.thin=1,
+      DIC=T,
+      bugs.directory=paste0(Sys.getenv(c("USERPROFILE")), "\\WinBUGS14"),debug=T)
+)
+```
+```{r}
+ts.model3 <- function(){
+    for (t in 1:T) {
+      y[t]~dnorm(mu[t],tau)
+      mu[t] <- alpha+beta1*x1[t]+beta2*x2[t]+beta3*x3[t]
+    }
+  
+  alpha ~ dnorm(0,1.0E-5)
+  beta1 ~ dnorm(0,1.0E-5)
+  beta2 ~ dnorm(0,1.0E-5)
+  beta3 ~ dnorm(0,1.0E-5)
+  tau~dgamma(0.01,0.01)
+}
+
+# the file I will save it too
+ts.file3 <- "D://tsmodel3.txt"
+
+## write model file:
+write.model(ts.model3,ts.file3)
+## and let's take a look:
+file.show(ts.file3)
+
+system.time(
+ts.bugs3 <- bugs(data=list(T=34,
+        x1=incomelag3,x2=incomelag2,x3=incomelag1,y=incomeres),
+      inits=list(list(tau=1)),
+      parameters.to.save=c("alpha","beta1","beta2","beta3","tau"),
+      ### PATH TO THE MODEL FILE
+      model.file=ts.file3,
+      n.chains=1,
+      n.iter=10000,
+      n.sim=5000,
+      n.burnin=5000,
+      n.thin=1,
+      DIC=T,
+      bugs.directory=paste0(Sys.getenv(c("USERPROFILE")), "\\WinBUGS14"),debug=T)
+)
+```
+
+```{r}
+ts.bugs1$DIC
+ts.bugs2$DIC
+ts.bugs3$DIC
+```
+
+```{r}
+round(ts.bugs1$summary,3)
+round(ts.bugs2$summary,3)
+round(ts.bugs3$summary,3)
+```
+```{r}
+hist(ts.bugs2$sims.list$beta1,xlim=c(-2,3),col='red',main='Histogram of beta1,beta2',xlab='')
+hist(ts.bugs2$sims.list$beta2,add=T,col='blue')
+hist(ts.bugs3$sims.list$beta1,xlim=c(-2,3),ylim=c(0,1200),col='red',main='Histogram of beta1,beta2,beta3',xlab='')
+hist(ts.bugs3$sims.list$beta2,add=T,col='blue')
+hist(ts.bugs3$sims.list$beta3,add=T,col='green')
+
+```
+
+
+```{r}
+simarray1<-array(dim = c(34,5000))
+for(j in 1:34){
+  simarray1[j,]<-ts.bugs1$sims.list$alpha+ts.bugs1$sims.list$beta*incomelag3[j]+rnorm(5000,0,1/sqrt(ts.bugs1$sims.list$tau))
+}
+post25_1<-apply(simarray1,1,quantile,.025)
+post975_1<-apply(simarray1,1,quantile,.975)
+plot(incomeres,ylim = c(50,300))
+points(post25_1,type = 'l',lty=4)
+points(post975_1,type = 'l',lty=4)
+```
+
+```{r}
+simarray<-array(dim = c(34,5000))
+for(j in 1:34){
+  simarray[j,]<-ts.bugs2$sims.list$alpha+ts.bugs2$sims.list$beta1*incomelag3[j]+ts.bugs2$sims.list$beta2*incomelag2[j]+rnorm(5000,0,1/sqrt(ts.bugs2$sims.list$tau))
+}
+post25<-apply(simarray,1,quantile,.025)
+post975<-apply(simarray,1,quantile,.975)
+plot(incomeres,ylim = c(50,300))
+points(post25,type = 'l',lty=4)
+points(post975,type = 'l',lty=4)
+```
+```{r}
+ressimarray<-array(dim = c(34,20000))
+simarray2<-array(dim = c(34,20000))
+for(j in 1:34){
+  simarray2[j,]<-ts.bugs2$sims.list$alpha+ts.bugs2$sims.list$beta1*incomelag3[j]+ts.bugs2$sims.list$beta2*incomelag2[j]+rnorm(20000,0,1/sqrt(ts.bugs2$sims.list$tau))
+  ressimarray[j,]<-simarray2[j,]-incomeres[j]
+}
+ressimarray1<-ressimarray[2:34,]
+ressimarray2<-ressimarray[1:33,]
+corarraysim<-rep(1,33*100)
+for(j in 1:100){
+  for(i in 1:33){
+    corarraysim[(j-1)*33+i]<-cor(ressimarray1[i,((j-1)*200+1):(j*200)],ressimarray2[i,((j-1)*200+1):(j*200)])
+  }
+}
+boxplot(corarraysim,xlab="Correlation")
+#quantile(corarraysim,c(0.025,0.975))
+abline(h=-0.09998,col='red')
+abline(h=0.2338,col='red')
+```
+```{r}
+##forecast
+forecastdis<-rnorm(5000,(-0.557+1.511*279.4-0.498*273.2),(1/sqrt(0.016)))
+hist(forecastdis,xlab = 'Agricultural Income Distribution',main='')
+abline(v=mean(forecastdis),col='red',cex=6)
+
+quantile(forecastdis,c(0.025,0.975))
+mean(forecastdis)
+```
+
+
+
+
+
